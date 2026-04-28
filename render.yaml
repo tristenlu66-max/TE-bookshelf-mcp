@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: te-bookshelf-mcp
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BACKEND_URL
+        sync: false
+      - key: SHARED_PASSWORD
+        sync: false
