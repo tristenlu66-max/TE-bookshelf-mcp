@@ -47,23 +47,27 @@ const TOOLS = [
   },
   {
     name: 'read_book_toc',
-    description: '查看一本书的目录(所有章节标题)。',
+    description: '查看一本书的目录(章节标题列表)。短书一次返回完整目录;长书(>500章)需要分页:用 start 指定起始 chapter_no,用 limit 控制返回多少章(默认 500,最大 500)。返回里 toc_has_more / toc_next_start 告诉你要不要再拉一次。',
     inputSchema: {
       type: 'object',
       properties: {
-        book_id: { type: 'string', description: '书的 ID' }
+        book_id: { type: 'string', description: '书的 ID' },
+        start: { type: 'integer', description: '起始章节号(默认 0,即从前言开始;长书第二次拉时传 toc_next_start)' },
+        limit: { type: 'integer', description: '本次最多返回多少章(默认 500,上限 500)' }
       },
       required: ['book_id']
     }
   },
   {
     name: 'read_chapter',
-    description: '读一本书的某一章。返回这一章的所有段落(每段有 para_no 和 content),以及这一章里所有已有的批注(包括 Tristen 和 Evan 写的)。',
+    description: '读一本书的某一章。返回这一章的段落(每段有 para_no 和 content)以及这一章的批注(包括 Tristen 和 Evan 写的)。短章一次返回完整内容;超长章节(>2000段)需要分页:用 para_start 指定起始段号,para_limit 控制每次返回多少段。返回里 para_has_more / para_next_start 告诉你要不要再拉一次。',
     inputSchema: {
       type: 'object',
       properties: {
         book_id: { type: 'string', description: '书的 ID' },
-        chapter_no: { type: 'integer', description: '章节序号(0=前言,1=第1章,以此类推)' }
+        chapter_no: { type: 'integer', description: '章节序号(0=前言,1=第1章,以此类推)' },
+        para_start: { type: 'integer', description: '起始段号(默认 1;长章第二次拉时传 para_next_start)' },
+        para_limit: { type: 'integer', description: '本次最多返回多少段(默认 2000,上限 2000)' }
       },
       required: ['book_id', 'chapter_no']
     }
@@ -120,12 +124,20 @@ async function handleToolCall(name, args) {
   }
 
   if (name === 'read_book_toc') {
-    return await callBackend('GET', `/api/evan?book_id=${encodeURIComponent(args.book_id)}`);
+    const params = new URLSearchParams({ book_id: args.book_id });
+    if (args.start !== undefined) params.set('toc_start', String(args.start));
+    if (args.limit !== undefined) params.set('toc_limit', String(args.limit));
+    return await callBackend('GET', `/api/evan?${params}`);
   }
 
   if (name === 'read_chapter') {
-    return await callBackend('GET',
-      `/api/evan?book_id=${encodeURIComponent(args.book_id)}&chapter=${args.chapter_no}`);
+    const params = new URLSearchParams({
+      book_id: args.book_id,
+      chapter: String(args.chapter_no)
+    });
+    if (args.para_start !== undefined) params.set('para_start', String(args.para_start));
+    if (args.para_limit !== undefined) params.set('para_limit', String(args.para_limit));
+    return await callBackend('GET', `/api/evan?${params}`);
   }
 
   if (name === 'write_annotation') {
@@ -166,7 +178,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.3.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.4.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -194,10 +206,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.3.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.4.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.3 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.4 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
