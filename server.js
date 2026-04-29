@@ -1,13 +1,12 @@
 // TE-bookshelf MCP server
 // 把 vercel 后端的 /api/evan 包成 MCP 工具
 import express from 'express';
-import { randomUUID } from 'crypto';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 const PORT = process.env.PORT || 3000;
-const BACKEND_URL = process.env.BACKEND_URL; // https://te-bookshelf.vercel.app
+const BACKEND_URL = process.env.BACKEND_URL;
 const SHARED_PASSWORD = process.env.SHARED_PASSWORD;
 
 if (!BACKEND_URL || !SHARED_PASSWORD) {
@@ -15,7 +14,6 @@ if (!BACKEND_URL || !SHARED_PASSWORD) {
   process.exit(1);
 }
 
-// 调 vercel 后端的 helper
 async function callBackend(method, path, body) {
   const url = `${BACKEND_URL}${path}`;
   const opts = {
@@ -37,7 +35,6 @@ async function callBackend(method, path, body) {
   return data;
 }
 
-// === MCP 工具定义 ===
 const TOOLS = [
   {
     name: 'list_books',
@@ -66,7 +63,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         book_id: { type: 'string', description: '书的 ID' },
-        chapter_no: { type: 'integer', description: '章节序号(从 1 开始)' }
+        chapter_no: { type: 'integer', description: '章节序号(0=前言,1=第1章,以此类推)' }
       },
       required: ['book_id', 'chapter_no']
     }
@@ -84,15 +81,25 @@ const TOOLS = [
       },
       required: ['book_id', 'chapter_no', 'para_no', 'content']
     }
+  },
+  {
+    name: 'add_preface',
+    description: '给一本书添加前言或新章节。chapter_no 不传默认 0(前言),传具体数字则按指定章号插入(注意不能跟已有章节冲突)。content 是纯文本,会按段落自动切分。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        book_id: { type: 'string', description: '书的 ID' },
+        content: { type: 'string', description: '章节正文(纯文本)' },
+        chapter_no: { type: 'integer', description: '章节序号,默认 0(作为前言)' },
+        title: { type: 'string', description: '章节标题,默认"前言"或"第 N 章"' }
+      },
+      required: ['book_id', 'content']
+    }
   }
 ];
 
-// === MCP 协议处理 ===
-// 简化的 MCP-over-HTTP:接受 POST /mcp,处理 JSON-RPC 风格的请求
-
 async function handleToolCall(name, args) {
   if (name === 'list_books') {
-    // /api/evan 没直接列书,我们走 /api/books(用 cookie)
     const r = await fetch(`${BACKEND_URL}/api/books`, {
       headers: { 'Cookie': `te_auth=${SHARED_PASSWORD}` }
     });
@@ -119,10 +126,18 @@ async function handleToolCall(name, args) {
     });
   }
   
+  if (name === 'add_preface') {
+    return await callBackend('POST', '/api/add-preface', {
+      book_id: args.book_id,
+      content: args.content,
+      chapter_no: args.chapter_no,
+      title: args.title
+    });
+  }
+  
   throw new Error(`Unknown tool: ${name}`);
 }
 
-// MCP endpoint - 走 streamable HTTP
 app.post('/mcp', async (req, res) => {
   const { jsonrpc, id, method, params } = req.body || {};
   
@@ -133,7 +148,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.1.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.2.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -144,7 +159,6 @@ app.post('/mcp', async (req, res) => {
         content: [{ type: 'text', text: JSON.stringify(data, null, 2) }]
       };
     } else if (method === 'notifications/initialized') {
-      // 不返回 result,不返回 id
       return res.status(204).end();
     } else {
       throw new Error(`Unknown method: ${method}`);
@@ -161,12 +175,11 @@ app.post('/mcp', async (req, res) => {
   }
 });
 
-// 健康检查
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.2.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.2 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
