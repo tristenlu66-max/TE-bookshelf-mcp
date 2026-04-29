@@ -24,7 +24,7 @@ async function callBackend(method, path, body) {
     }
   };
   if (body) opts.body = JSON.stringify(body);
-  
+
   const r = await fetch(url, opts);
   const text = await r.text();
   let data;
@@ -95,6 +95,17 @@ const TOOLS = [
       },
       required: ['book_id', 'content']
     }
+  },
+  {
+    name: 'delete_book',
+    description: '从书架上删除一本书。会同时删掉这本书的所有章节、段落、批注,无法恢复。调用前请通过 list_books 确认 book_id 没认错,删除是不可逆的操作。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        book_id: { type: 'string', description: '要删除的书的 ID' }
+      },
+      required: ['book_id']
+    }
   }
 ];
 
@@ -107,16 +118,16 @@ async function handleToolCall(name, args) {
     if (!r.ok) throw new Error(data.error || 'list failed');
     return data;
   }
-  
+
   if (name === 'read_book_toc') {
     return await callBackend('GET', `/api/evan?book_id=${encodeURIComponent(args.book_id)}`);
   }
-  
+
   if (name === 'read_chapter') {
-    return await callBackend('GET', 
+    return await callBackend('GET',
       `/api/evan?book_id=${encodeURIComponent(args.book_id)}&chapter=${args.chapter_no}`);
   }
-  
+
   if (name === 'write_annotation') {
     return await callBackend('POST', '/api/evan', {
       book_id: args.book_id,
@@ -125,7 +136,7 @@ async function handleToolCall(name, args) {
       content: args.content
     });
   }
-  
+
   if (name === 'add_preface') {
     return await callBackend('POST', '/api/add-preface', {
       book_id: args.book_id,
@@ -134,21 +145,28 @@ async function handleToolCall(name, args) {
       title: args.title
     });
   }
-  
+
+  if (name === 'delete_book') {
+    return await callBackend(
+      'DELETE',
+      `/api/delete-book?id=${encodeURIComponent(args.book_id)}`
+    );
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 }
 
 app.post('/mcp', async (req, res) => {
   const { jsonrpc, id, method, params } = req.body || {};
-  
+
   try {
     let result;
-    
+
     if (method === 'initialize') {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.2.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.3.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -163,7 +181,7 @@ app.post('/mcp', async (req, res) => {
     } else {
       throw new Error(`Unknown method: ${method}`);
     }
-    
+
     res.json({ jsonrpc: '2.0', id, result });
   } catch (e) {
     console.error('MCP error:', e);
@@ -176,10 +194,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.2.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.3.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.2 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.3 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
