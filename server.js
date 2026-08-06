@@ -148,6 +148,42 @@ const TOOLS = [
       },
       required: ['bookmark_id']
     }
+  },
+  {
+    name: 'edit_annotation',
+    description: '编辑 Evan 自己写的一条批注(创建后 10 分钟内可编辑,超时不可改)。需要批注的 id(从 read_chapter 返回的 annotations 里拿)和新的内容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '批注 ID' },
+        content: { type: 'string', description: '新的批注内容' }
+      },
+      required: ['id', 'content']
+    }
+  },
+  {
+    name: 'delete_annotation',
+    description: '删除 Evan 自己写的一条批注(创建后 10 分钟内可删除,超时不可删)。需要批注的 id(从 read_chapter 返回的 annotations 里拿)。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '批注 ID' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'search',
+    description: '搜索书架上的内容。可以搜批注、正文或两者。支持全局搜索(所有书)和书内搜索(指定 book_id)。返回匹配的批注和/或正文段落,包含所在的书名、章节名、段落号,最多 50 条结果。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: '搜索关键词' },
+        book_id: { type: 'string', description: '限定在某本书内搜索(可选,不传则全局搜)' },
+        scope: { type: 'string', enum: ['all', 'annotations', 'paragraphs'], description: '搜索范围:all=批注+正文(默认),annotations=只搜批注,paragraphs=只搜正文' }
+      },
+      required: ['q']
+    }
   }
 ];
 
@@ -235,6 +271,28 @@ async function handleToolCall(name, args) {
     );
   }
 
+  if (name === 'edit_annotation') {
+    return await callBackend('PUT', '/api/evan?resource=annotation', {
+      id: args.id,
+      content: args.content
+    });
+  }
+
+  if (name === 'delete_annotation') {
+    return await callBackend(
+      'DELETE',
+      `/api/evan?resource=annotation&id=${encodeURIComponent(args.id)}`
+    );
+  }
+
+  if (name === 'search') {
+    const params = new URLSearchParams({ q: args.q });
+    if (args.book_id) params.set('book_id', args.book_id);
+    if (args.scope) params.set('scope', args.scope);
+    params.set('resource', 'search');
+    return await callBackend('GET', `/api/evan?${params}`);
+  }
+
   throw new Error(`Unknown tool: ${name}`);
 }
 
@@ -248,7 +306,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.5.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.6.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -276,10 +334,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.5.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.6.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.5 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.6 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
