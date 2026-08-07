@@ -1,0 +1,93 @@
+name: Deploy TE Bookshelf MCP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: te-bookshelf-mcp-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy and verify
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.BOOKSHELF_DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.BOOKSHELF_DEPLOY_KNOWN_HOSTS }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+
+      - name: Configure deployment SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Package production source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude-vcs \
+            --exclude=.env \
+            --exclude=.env.* \
+            --exclude=node_modules \
+            -czf "$RUNNER_TEMP/te-bookshelf-mcp.tar.gz" .
+
+      - name: Deploy and verify VPS service
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          cat "$RUNNER_TEMP/te-bookshelf-mcp.tar.gz" | ssh -p "$DEPLOY_PORT" -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" '
+              set -euo pipefail
+              app_dir=/srv/te/bookshelf-mcp
+              test -d "$app_dir"
+              stage_dir=$(mktemp -d /srv/te/.bookshelf-mcp-deploy.XXXXXX)
+              cleanup() { rm -rf "$stage_dir"; }
+              trap cleanup EXIT
+              tar -xzf - -C "$stage_dir"
+              cd "$stage_dir"
+              npm ci --omit=dev
+              rsync -a --delete \
+                --exclude=.env \
+                --exclude=.env.* \
+                --exclude=node_modules \
+                "$stage_dir/" "$app_dir/"
+              rsync -a --delete "$stage_dir/node_modules/" "$app_dir/node_modules/"
+              sudo -n /usr/bin/systemctl restart bookshelf-mcp
+              for attempt in $(seq 1 15); do
+                if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:3001/; then
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "bookshelf-mcp did not become healthy within 30 seconds" >&2
+              exit 1
+            '
