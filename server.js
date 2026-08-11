@@ -20,6 +20,7 @@ async function callBackend(method, path, body) {
     method,
     headers: {
       'x-auth': SHARED_PASSWORD,
+      'x-vocabulary-owner': 'evan',
       'Content-Type': 'application/json'
     }
   };
@@ -173,6 +174,30 @@ const TOOLS = [
     }
   },
   {
+    name: 'lookup_word',
+    description: '在线查询中文或英文词语。中文返回中文释义；英文返回英中双语释义（Azure 未配置时至少返回英英释义）。',
+    inputSchema: {
+      type: 'object',
+      properties: { term: { type: 'string', description: '要查询的词或短语' } },
+      required: ['term']
+    }
+  },
+  {
+    name: 'list_words',
+    description: '查看 Evan 自己的单词本。按语言返回已收藏的词和全部来源。',
+    inputSchema: { type: 'object', properties: { language: { type: 'string', enum: ['en', 'zh'], description: '英文或中文分区' } }, required: ['language'] }
+  },
+  {
+    name: 'save_word',
+    description: '把一个词收藏到 Evan 的单词本。来源必须指向书中一段；后端会从原文自动提取完整来源句子。',
+    inputSchema: { type: 'object', properties: { term:{type:'string',description:'词或短语'}, language:{type:'string',enum:['en','zh']}, book_id:{type:'string'}, chapter_no:{type:'integer'}, paragraph_id:{type:'string'}, selection_start:{type:'integer',description:'词在段落中的起始字符位置，可选'}, selection_end:{type:'integer',description:'词在段落中的结束字符位置，可选'} }, required:['term','language','book_id','chapter_no','paragraph_id'] }
+  },
+  {
+    name: 'remove_word',
+    description: '从 Evan 的单词本删除一个词及其来源。',
+    inputSchema: { type:'object', properties:{term:{type:'string'},language:{type:'string',enum:['en','zh']}}, required:['term','language'] }
+  },
+  {
     name: 'search',
     description: '搜索书架上的内容。可以搜批注、正文或两者。支持全局搜索(所有书)和书内搜索(指定 book_id)。返回匹配的批注和/或正文段落,包含所在的书名、章节名、段落号,最多 50 条结果。',
     inputSchema: {
@@ -293,6 +318,11 @@ async function handleToolCall(name, args) {
     return await callBackend('GET', `/api/evan?${params}`);
   }
 
+  if (name === 'list_words') return await callBackend('GET', `/api/words?language=${encodeURIComponent(args.language)}`);
+  if (name === 'lookup_word') return await callBackend('GET', `/api/dictionary?q=${encodeURIComponent(args.term)}`);
+  if (name === 'save_word') return await callBackend('POST', '/api/words', args);
+  if (name === 'remove_word') return await callBackend('DELETE', '/api/words', args);
+
   throw new Error(`Unknown tool: ${name}`);
 }
 
@@ -306,7 +336,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.6.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.7.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -334,10 +364,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.6.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.7.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.6 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.7 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });

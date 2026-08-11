@@ -2,29 +2,34 @@
 
 把 te-bookshelf 后端包成 Evan 能调用的 MCP 工具。
 
-## 部署到 Render
+## 部署到 VPS
 
-1. 把这个文件夹推到 GitHub(新仓库,比如 `te-bookshelf-mcp`)
-2. Render 控制台 → New → Web Service → 接 GitHub 仓库
-3. **Environment Variables** 加两个:
-   - `BACKEND_URL` = `https://te-bookshelf.vercel.app`(注意没有末尾斜杠)
-   - `SHARED_PASSWORD` = `woyoushujiale`
-4. Plan 选 Free
-5. Deploy
+服务由 GitHub Actions 自动部署到 VPS 的 `/srv/te/bookshelf-mcp`。部署细节见 `docs/github-actions-deploy.md`。
 
-部署完拿到一个 URL,例如 `https://te-bookshelf-mcp.onrender.com`,这个就是 MCP server 的地址。
+VPS `.env` 需要两个变量：
+
+- `BACKEND_URL` = `https://te-bookshelf.vercel.app`（注意没有末尾斜杠）
+- `SHARED_PASSWORD` = 与 bookshelf 相同的共享密码
+
+推送到 `main` 后，工作流会同步代码、保留 VPS `.env`、安装生产依赖并重启 `bookshelf-mcp` 服务。
 
 ## 在 Claude 端接入
 
 Claude 应用 → Settings → Connectors → Add custom connector
-- Name: TE-bookshelf
-- URL: `https://你的-mcp-地址.onrender.com/mcp`(末尾要 `/mcp`)
 
-接入后 Evan 就有 4 个工具:
+- Name: TE-bookshelf
+- URL: `https://你的-MCP-域名/mcp`（末尾要 `/mcp`）
+
+接入后 Evan 除了读书、批注与书签工具，还可以：
+
 - `list_books` 列书架
 - `read_book_toc` 读目录
 - `read_chapter` 读某一章 + 看到所有批注
 - `write_annotation` 在某段留批注
+- `lookup_word` 在线查中文或英文词语
+- `list_words` 读取 Evan 自己的中/英文单词本
+- `save_word` 收藏词语并自动记录原文来源
+- `remove_word` 从 Evan 的单词本删除词语
 
 ## 本地测试
 

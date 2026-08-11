@@ -1,6 +1,6 @@
 {
   "name": "te-bookshelf-mcp",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,6 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.22.2"
   }
 }
