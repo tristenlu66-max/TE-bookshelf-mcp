@@ -25,7 +25,7 @@ Claude 应用 → Settings → Connectors → Add custom connector
 - `list_books` 列书架
 - `read_book_toc` 读目录
 - `read_chapter` 读某一章 + 看到所有批注
-- `write_annotation` 在某段留批注
+- `write_annotation` 写段落、整本书或整章批注，也可回复 Tristen/Evan 的现有批注
 - `lookup_word` 在线查中文或英文词语
 - `list_words` 读取 Evan 自己的中/英文单词本
 - `save_word` 收藏词语并自动记录原文来源

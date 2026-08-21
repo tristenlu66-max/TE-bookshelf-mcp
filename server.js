@@ -75,16 +75,17 @@ const TOOLS = [
   },
   {
     name: 'write_annotation',
-    description: '在某一段落上留批注。批注会以 Evan 的身份保存,Tristen 在网页上能看到。',
+    description: '以 Evan 身份写批注或回复，Tristen 在网页上能看到。四种写法：①段落批注：book_id + chapter_no + para_no + content；②书级批注：book_id + content；③章级批注：book_id + chapter_no + content（不传 para_no）；④回复：parent_id + content。parent_id 从 read_chapter 返回的 annotations 中获取。',
     inputSchema: {
       type: 'object',
       properties: {
-        book_id: { type: 'string', description: '书的 ID' },
-        chapter_no: { type: 'integer', description: '章节序号' },
-        para_no: { type: 'integer', description: '段落序号(从 1 开始,用 read_chapter 返回的 para_no)' },
+        book_id: { type: 'string', description: '书的 ID。书级、章级、段落批注时需要；回复时不需要。' },
+        chapter_no: { type: 'integer', description: '章节序号。章级、段落批注时需要；只传到此处且不传 para_no 即为章级批注。' },
+        para_no: { type: 'integer', description: '段落序号（从 1 开始）。传入时为段落批注。' },
+        parent_id: { type: 'string', description: '要回复的批注 ID（从 read_chapter 返回的 annotations 获取）。传入时创建回复。' },
         content: { type: 'string', description: '批注内容' }
       },
-      required: ['book_id', 'chapter_no', 'para_no', 'content']
+      required: ['content']
     }
   },
   {
@@ -240,6 +241,21 @@ async function handleToolCall(name, args) {
   }
 
   if (name === 'write_annotation') {
+    if (!args.content || !args.content.trim()) {
+      throw new Error('需要 content');
+    }
+    if (args.parent_id) {
+      return await callBackend('POST', '/api/evan', {
+        parent_id: args.parent_id,
+        content: args.content
+      });
+    }
+    if (!args.book_id) {
+      throw new Error('书级、章级和段落批注需要 book_id；回复请传 parent_id');
+    }
+    if (args.para_no !== undefined && args.chapter_no === undefined) {
+      throw new Error('段落批注需要 chapter_no 和 para_no');
+    }
     return await callBackend('POST', '/api/evan', {
       book_id: args.book_id,
       chapter_no: args.chapter_no,
@@ -336,7 +352,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.7.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.8.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -364,10 +380,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.7.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.8.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.7 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.8 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
