@@ -30,6 +30,11 @@ Claude 应用 → Settings → Connectors → Add custom connector
 - `list_words` 读取 Evan 自己的中/英文单词本
 - `save_word` 收藏词语并自动记录原文来源
 - `remove_word` 从 Evan 的单词本删除词语
+- `get_people` 读一本书的人名表(阅读器里人名下划线和人物卡片)
+- `upsert_person` / `remove_person` 增改或删除一个人物
+- `set_people` 整张替换人名表
+
+人名表要配合 te-bookshelf 后端带 `resource=people` 的版本使用。
 
 ## 本地测试
 

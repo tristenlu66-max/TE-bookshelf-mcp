@@ -61,7 +61,7 @@ const TOOLS = [
   },
   {
     name: 'read_chapter',
-    description: '读一本书的某一章。返回这一章的段落(每段有 para_no 和 content)以及这一章的批注(包括 Tristen 和 Evan 写的)。短章一次返回完整内容;超长章节(>2000段)需要分页:用 para_start 指定起始段号,para_limit 控制每次返回多少段。返回里 para_has_more / para_next_start 告诉你要不要再拉一次。',
+    description: '读一本书的某一章。返回这一章的段落(每段有 para_no 和 content;marks.em 是着重/斜体的字符范围)、这一章的脚注(footnotes:所在段落、编号、注释内容)以及批注(包括 Tristen 和 Evan 写的)。短章一次返回完整内容;超长章节(>2000段)需要分页:用 para_start 指定起始段号,para_limit 控制每次返回多少段。返回里 para_has_more / para_next_start 告诉你要不要再拉一次。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -199,6 +199,94 @@ const TOOLS = [
     inputSchema: { type:'object', properties:{term:{type:'string'},language:{type:'string',enum:['en','zh']}}, required:['term','language'] }
   },
   {
+    name: 'get_people',
+    description: '读一本书的人名表。阅读器用它给人名画下划线、点开弹人物卡片。返回 characters(每人的叫法、颜色、按章节解锁的卡片和关系)、never_alone(单独出现时不上色的词),以及 source:saved=数据库里的,seed=随代码带来的初版。',
+    inputSchema: {
+      type: 'object',
+      properties: { book_id: { type: 'string', description: '书的 ID' } },
+      required: ['book_id']
+    }
+  },
+  {
+    name: 'upsert_person',
+    description: '在人名表里新增或改写一个人物(按 id 覆盖),其他人不动。新人物出场、卡片要随剧情往后补一句时用这个。aliases 一定要按书架上这一版的译名核对过再写。卡片按 from_chapter 分条写,只写读到那一章为止知道的事,不剧透。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        book_id: { type: 'string', description: '书的 ID' },
+        person: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '人物 id,只用字母数字下划线,如 raskolnikov' },
+            tier: { type: 'string', enum: ['main', 'minor'], description: 'main=彩色实线(一本书最多七八个),minor=灰色虚线' },
+            color: { type: 'string', description: 'main 用的颜色 #rrggbb;别用红 #bc4749/#8b2d2d(Evan 批注)和金 #c4a882/#8a6c3a(Tristen 批注)' },
+            style: { type: 'string', enum: ['solid', 'wavy', 'double', 'dashed'], description: '下划线样式,默认 solid' },
+            display: { type: 'string', description: '卡片上显示的名字' },
+            aliases: { type: 'array', items: { type: 'string' }, description: '书里出现过的每一种叫法(全名、父称连用、昵称),至少两个字;按这一版译名写' },
+            first_chapter: { type: 'integer', description: '第一次出场的 chapter_no' },
+            card: {
+              type: 'array',
+              description: '卡片内容,读到 from_chapter 才显示,用来防剧透',
+              items: { type: 'object', properties: { from_chapter: { type: 'integer' }, text: { type: 'string' } }, required: ['from_chapter', 'text'] }
+            },
+            relations: {
+              type: 'array',
+              items: { type: 'object', properties: { to: { type: 'string', description: '对方的 id' }, label: { type: 'string', description: '对方是他的什么,如 妹妹' }, from_chapter: { type: 'integer' } }, required: ['to', 'label'] }
+            }
+          },
+          required: ['id', 'display', 'aliases']
+        }
+      },
+      required: ['book_id', 'person']
+    }
+  },
+  {
+    name: 'remove_person',
+    description: '从人名表里删掉一个人物,别人指向他的关系会一起去掉。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        book_id: { type: 'string', description: '书的 ID' },
+        person_id: { type: 'string', description: '要删的人物 id' }
+      },
+      required: ['book_id', 'person_id']
+    }
+  },
+  {
+    name: 'set_people',
+    description: '整张替换一本书的人名表。一次性建表或大改时用;平时增改一个人请用 upsert_person。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        book_id: { type: 'string', description: '书的 ID' },
+        never_alone: { type: 'array', items: { type: 'string' }, description: '单独出现时不上色的词,如几个人共用的父称' },
+        characters: { type: 'array', items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: '人物 id,只用字母数字下划线,如 raskolnikov' },
+            tier: { type: 'string', enum: ['main', 'minor'], description: 'main=彩色实线(一本书最多七八个),minor=灰色虚线' },
+            color: { type: 'string', description: 'main 用的颜色 #rrggbb;别用红 #bc4749/#8b2d2d(Evan 批注)和金 #c4a882/#8a6c3a(Tristen 批注)' },
+            style: { type: 'string', enum: ['solid', 'wavy', 'double', 'dashed'], description: '下划线样式,默认 solid' },
+            display: { type: 'string', description: '卡片上显示的名字' },
+            aliases: { type: 'array', items: { type: 'string' }, description: '书里出现过的每一种叫法(全名、父称连用、昵称),至少两个字;按这一版译名写' },
+            first_chapter: { type: 'integer', description: '第一次出场的 chapter_no' },
+            card: {
+              type: 'array',
+              description: '卡片内容,读到 from_chapter 才显示,用来防剧透',
+              items: { type: 'object', properties: { from_chapter: { type: 'integer' }, text: { type: 'string' } }, required: ['from_chapter', 'text'] }
+            },
+            relations: {
+              type: 'array',
+              items: { type: 'object', properties: { to: { type: 'string', description: '对方的 id' }, label: { type: 'string', description: '对方是他的什么,如 妹妹' }, from_chapter: { type: 'integer' } }, required: ['to', 'label'] }
+            }
+          },
+          required: ['id', 'display', 'aliases']
+        } }
+      },
+      required: ['book_id', 'characters']
+    }
+  },
+  {
     name: 'search',
     description: '搜索书架上的内容。可以搜批注、正文或两者。支持全局搜索(所有书)和书内搜索(指定 book_id)。返回匹配的批注和/或正文段落,包含所在的书名、章节名、段落号,最多 50 条结果。',
     inputSchema: {
@@ -326,6 +414,45 @@ async function handleToolCall(name, args) {
     );
   }
 
+  if (name === 'get_people') {
+    const params = new URLSearchParams({ resource: 'people', book_id: args.book_id });
+    return await callBackend('GET', `/api/evan?${params}`);
+  }
+
+  if (name === 'set_people') {
+    return await callBackend('PUT', '/api/evan?resource=people', {
+      book_id: args.book_id,
+      data: { never_alone: args.never_alone || [], characters: args.characters || [] }
+    });
+  }
+
+  if (name === 'upsert_person' || name === 'remove_person') {
+    const params = new URLSearchParams({ resource: 'people', book_id: args.book_id });
+    const current = (await callBackend('GET', `/api/evan?${params}`)).people || { never_alone: [], characters: [] };
+    let characters = current.characters || [];
+    let changed;
+    if (name === 'upsert_person') {
+      const person = args.person || {};
+      if (!person.id) throw new Error('person 需要 id');
+      const existed = characters.some(item => item.id === person.id);
+      characters = existed
+        ? characters.map(item => (item.id === person.id ? person : item))
+        : [...characters, person];
+      changed = `${existed ? '改写' : '新增'} ${person.id}`;
+    } else {
+      if (!characters.some(item => item.id === args.person_id)) throw new Error(`人名表里没有 ${args.person_id}`);
+      characters = characters
+        .filter(item => item.id !== args.person_id)
+        .map(item => ({ ...item, relations: (item.relations || []).filter(rel => rel.to !== args.person_id) }));
+      changed = `删除 ${args.person_id}`;
+    }
+    const saved = await callBackend('PUT', '/api/evan?resource=people', {
+      book_id: args.book_id,
+      data: { never_alone: current.never_alone || [], characters }
+    });
+    return { ok: true, changed, count: saved.count };
+  }
+
   if (name === 'search') {
     const params = new URLSearchParams({ q: args.q });
     if (args.book_id) params.set('book_id', args.book_id);
@@ -352,7 +479,7 @@ app.post('/mcp', async (req, res) => {
       result = {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'te-bookshelf', version: '0.8.0' }
+        serverInfo: { name: 'te-bookshelf', version: '0.9.0' }
       };
     } else if (method === 'tools/list') {
       result = { tools: TOOLS };
@@ -380,10 +507,10 @@ app.post('/mcp', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.8.0' });
+  res.json({ status: 'ok', service: 'te-bookshelf-mcp', version: '0.9.0' });
 });
 
 app.listen(PORT, () => {
-  console.log(`TE-bookshelf MCP server v0.8 on port ${PORT}`);
+  console.log(`TE-bookshelf MCP server v0.9 on port ${PORT}`);
   console.log(`Backend: ${BACKEND_URL}`);
 });
